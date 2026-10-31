@@ -1460,3 +1460,25 @@ def test_unwrap_positions(ar_double_sim_state: ts.SimState, lj_model: LennardJon
         state.system_idx,
     )
     assert torch.allclose(unwrapped_positions, positions, atol=1e-4)
+
+
+def test_unwrap_positions_triclinic() -> None:
+    # Lattice vectors as columns, matching SimState.cell
+    cell = torch.tensor(
+        [[6.0, 0.0, 0.0], [1.5, 5.0, 0.0], [1.0, 1.2, 4.5]], dtype=DTYPE
+    ).T.unsqueeze(0)
+    system_idx = torch.zeros(2, dtype=torch.long)
+    start = torch.tensor([[5.5, 4.5, 4.0], [1.0, 1.0, 1.0]], dtype=DTYPE)
+    step = torch.tensor([[0.3, 0.25, 0.2], [-0.2, 0.1, -0.15]], dtype=DTYPE)
+    positions = torch.stack([start + i * step for i in range(20)])
+    wrapped = torch.stack(
+        [tst.pbc_wrap_batched(pos, cell, system_idx) for pos in positions]
+    )
+    assert not torch.allclose(wrapped, positions)
+
+    unwrapped = tst.unwrap_positions(wrapped, cell, system_idx)
+    assert torch.allclose(unwrapped, positions, atol=1e-10)
+
+    cells = cell.expand(len(positions), -1, -1, -1)
+    unwrapped = tst.unwrap_positions(wrapped, cells, system_idx)
+    assert torch.allclose(unwrapped, positions, atol=1e-10)
